@@ -40,7 +40,7 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int setupTCP(char *host_port_num){
+int setupTCP(){
     
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
@@ -53,7 +53,7 @@ int setupTCP(char *host_port_num){
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    if((rv = getaddrinfo(HOST_IP_ADDRESS, host_port_num, &hints, &servinfo)) != 0) {
+    if((rv = getaddrinfo(HOST_IP_ADDRESS, HOST_TCP_PORT_NUM, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
     }
@@ -97,7 +97,7 @@ int setupTCP(char *host_port_num){
     return sockfd;
 }
 
-int setupUDP(char *host_port_num){
+int setupUDP(){
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -107,7 +107,7 @@ int setupUDP(char *host_port_num){
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_flags = AI_PASSIVE; // use my IP
 
-	if ((rv = getaddrinfo(HOST_IP_ADDRESS, host_port_num, &hints, &servinfo)) != 0) {
+	if ((rv = getaddrinfo(HOST_IP_ADDRESS, HOST_UDP_PORT_NUM, &hints, &servinfo)) != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
 	}
@@ -155,10 +155,10 @@ int main(void){
     char s[INET6_ADDRSTRLEN];
 
     //setup tcp socket
-    tcp_sockfd = setupTCP((char *)HOST_TCP_PORT_NUM);
+    tcp_sockfd = setupTCP();
 
     //setup udp socket
-    udp_sockfd = setupUDP((char *)HOST_UDP_PORT_NUM);
+    udp_sockfd = setupUDP();
 
     printf("The main server is up and running.\n");
 
@@ -198,7 +198,7 @@ int main(void){
         close(tcp_child_fd); //parent continues to listen but child is done.
     }
 
-    close(tcp_sockfd);
+    close(tcp_sockfd); //Finally close parent socket
     return 0;
 }
 
