@@ -107,11 +107,11 @@ int main(void)
 
     // 0. Load EE course catalogue
     loadCourseCatalogue(ee_catalogue);
-
+/*
     for(std::map<std::string, std::string>::iterator it=ee_catalogue.begin(); it!=ee_catalogue.end(); ++it){
         std::cout << it->first << ": " << it->second << std::endl; 
     }
-
+*/
     while(1){
         
         // 1. Receive data from ServerM

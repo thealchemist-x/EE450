@@ -9,12 +9,17 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <map>
+#include <iostream>
+#include <algorithm>
 
 #define HOST_IP_ADDRESS         "127.0.0.1"
 #define HOST_UDP_PORT_NUM       "21082"
 
 #define SERVERM_UDP_PORT_NUM    "24082"
 #define MAXBUFLEN               100
+
+#define CREDENTIALS             "cred.txt"
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -24,6 +29,51 @@ void *get_in_addr(struct sockaddr *sa)
 	}
 
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+int findCommaIndex(char *buf){
+    int idx=-1;
+    while(*buf!=','){
+        idx++;
+        buf++;
+    }
+    
+    //Return buf to original index
+    buf-=idx;
+    return idx;
+}
+
+void loadCredentials(std::map<std::string, std::string> &credDB){
+    //Open file
+    FILE *fp = fopen(CREDENTIALS, "r");
+    if(fp == NULL){
+        fprintf(stderr, "Error opening %s\n", CREDENTIALS);
+        exit(-1);
+    }
+
+    //Access file
+    char buf[1000];
+    memset(buf, 0, sizeof(buf));
+    while(fgets(buf, sizeof(buf), fp) != NULL){
+        int commaIdx = findCommaIndex(buf);
+
+        if(commaIdx==-1){
+            fprintf(stderr, "Loading cred failed. Error detected in cred.txt\n");
+            exit(-1);
+        }
+
+        //Separate buf into username and password
+        char username[commaIdx+2];
+        char password[strlen(buf)-commaIdx];
+        memset(username, 0, sizeof(username));
+        memset(password, 0, sizeof(password));
+
+        strncpy(username, buf, commaIdx+1);
+        std::copy(buf+commaIdx+2, buf+commaIdx+2+sizeof(password), password);
+
+        //Store username and password in map
+        credDB[username]=password;
+    }
 }
 
 int main(void)
@@ -36,6 +86,8 @@ int main(void)
 	char buf[MAXBUFLEN];
 	socklen_t addr_len;
 	char s[INET6_ADDRSTRLEN];
+
+    std::map<std::string, std::string> credDB;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
@@ -74,6 +126,15 @@ int main(void)
 	printf("The ServerC is up and running using UDP on port %s.\n", HOST_UDP_PORT_NUM);
 
 	addr_len = sizeof(their_addr);
+
+    //0. Load credentials
+    loadCredentials(credDB);
+
+/*
+    for(std::map<std::string, std::string>:: iterator it=credDB.begin(); it!=credDB.end(); ++it){
+        std::cout << it->first << " : " << it->second << std::endl;
+    }
+*/
 
     while(1){
         
