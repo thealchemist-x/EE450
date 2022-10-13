@@ -9,11 +9,13 @@
 #include <sys/socket.h>
 
 #include <arpa/inet.h>
+#include <iostream>
+#include <string>
 
 #define SERVERM_IP_ADDRESS      "127.0.0.1"
 #define SERVERM_TCP_PORT_NUM    "25082" // the port client will be connecting to 
 
-#define MAXDATASIZE 100 // max number of bytes we can get at once 
+#define MAXDATASIZE 1000 // max number of bytes we can get at once 
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -23,6 +25,18 @@ void *get_in_addr(struct sockaddr *sa)
 	}
 
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+std::string getUserCredentials(){
+    std::string username="", password="", combined="";
+    std::cout << "Please enter the username: ";
+    std::cin >> username;
+    std::cout << "Please enter the password: ";
+    std::cin >> password;
+
+    //username and password separated by a space!
+    combined=username+" "+password;
+    return combined;
 }
 
 int setupTCP(){
@@ -84,7 +98,16 @@ int main(int argc, char *argv[])
 
     tcp_sockfd = setupTCP();
 
+    // 0. Get username and password from user
+    std::string userLoginDetails = getUserCredentials();
+
     // 1. Sending username and password to ServerM (use send(.) )
+    if((numbytes = send(tcp_sockfd, userLoginDetails.c_str(), userLoginDetails.length(),0)== -1)){
+        perror("send");
+        exit(1);
+    }
+
+//    printf("numbytes=%d, userLoginDetails=%s, length=%d\n", numbytes, buf, strlen(buf));
 
 /*
     // 2. Receiving from ServerM

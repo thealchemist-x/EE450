@@ -18,7 +18,7 @@
 #define SERVERC_PORT_NUM    "21082"
 #define SERVEREE_PORT_NUM   "23082"
 #define SERVERCS_PORT_NUM   "22082"
-#define MAXBUFLEN           100
+#define MAXBUFLEN           1000
 
 void sigchld_handler(int s){
     // waitpid() might overwrite errno, so we save and restore it:
@@ -147,12 +147,13 @@ int udpQuery(int sockfd, char *queryData, char *port)
 }
 
 int main(void){
-    int tcp_sockfd, tcp_child_fd;
+    int tcp_sockfd, tcp_child_fd, numbytes;
     int udp_sockfd;
 
     struct sockaddr_storage their_addr; //connector's address information
     socklen_t sin_size;
     char s[INET6_ADDRSTRLEN];
+    char buf[MAXBUFLEN];
 
     //setup tcp socket
     tcp_sockfd = setupTCP();
@@ -185,7 +186,13 @@ int main(void){
             //2. This is how we receive data over TCP
             recv(.)
 */
+            if((numbytes = recv(tcp_child_fd, buf, MAXBUFLEN-1, 0)) == -1){
+                perror("recv");
+                exit(1);
+            }
 
+            buf[numbytes]='\0';
+            printf("ServerM received the following: %s, numbytes=%d\n", buf, numbytes);
 /*
             //3. We may have to do some processing from received (TCP) data before relaying
 
