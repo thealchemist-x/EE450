@@ -9,12 +9,19 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <map>
+#include <string>
+#include <iostream>
 
 #define HOST_IP_ADDRESS         "127.0.0.1"
 #define HOST_UDP_PORT_NUM       "22082"
 
 #define SERVERM_UDP_PORT_NUM    "24082"
 #define MAXBUFLEN               100
+
+#define CS_COURSE_CATALOGUE     "cs.txt"
+#define COURSE_CODE_LENGTH      5
+#define COURSE_CREDIT_IDX       6
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -24,6 +31,27 @@ void *get_in_addr(struct sockaddr *sa)
 	}
 
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void loadCourseCatalogue(std::map<std::string, std::string> &cs_catalogue){
+    
+    //Open file
+    FILE *fp = fopen(CS_COURSE_CATALOGUE, "r");
+    if(fp == NULL){
+        fprintf(stderr, "Error opening %s\n", CS_COURSE_CATALOGUE);
+        exit(-1);
+    }
+
+    //Access file
+    char buf[1000];
+    char courseCode[6];
+    memset(buf, 0, sizeof(buf));
+    while(fgets(buf, sizeof(buf), fp) != NULL){
+        strncpy(courseCode, buf, COURSE_CODE_LENGTH);
+
+        //Store CS catalogue in a map
+        cs_catalogue[courseCode]=buf;
+    }
 }
 
 int main(void)
@@ -36,6 +64,8 @@ int main(void)
 	char buf[MAXBUFLEN];
 	socklen_t addr_len;
 	char s[INET6_ADDRSTRLEN];
+
+    std::map<std::string, std::string> cs_catalogue;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
@@ -75,6 +105,13 @@ int main(void)
 
 	addr_len = sizeof(their_addr);
 
+    //0. Load CS course catalogue
+    loadCourseCatalogue(cs_catalogue);
+/*  
+    for(std::map<std::string, std::string>::iterator it=cs_catalogue.begin(); it!=cs_catalogue.end(); ++it){
+        std::cout << it->first << ": " << it->second << std::endl; 
+    }
+*/
     while(1){
         
         // 1. Receive data from ServerM
