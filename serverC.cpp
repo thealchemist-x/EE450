@@ -86,6 +86,7 @@ int main(void)
 	char buf[MAXBUFLEN];
 	socklen_t addr_len;
 	char s[INET6_ADDRSTRLEN];
+    char portstr[NI_MAXSERV];
 
     std::map<std::string, std::string> credDB;
 
@@ -145,10 +146,18 @@ int main(void)
             exit(1);
         }
 
+        inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof(s));
+        int rc= getnameinfo((struct sockaddr *) &their_addr, addr_len, s, sizeof(s), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
+        if(rc!=0){ 
+            perror("getnameinfo failed!");
+            exit(1);
+        }
+
         buf[numbytes] = '\0';
 
         // 2. Process the data
-
+        unsigned int pNum = std::stoi(portstr);
+        printf("ServerC received the following: %s, numbytes=%d, from port=%d\n", buf, numbytes, pNum);
         // 3. Send the data back to ServerM ( use sendto(.) )
 
 /*

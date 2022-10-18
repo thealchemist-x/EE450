@@ -228,10 +228,58 @@ std::string encryptData(std::string data){
 }
 
 //Within tcp child socket
-//queryData: data to be forwarded from client to either ServerC, ServerEE or ServerCS
-int udpQuery(int sockfd, char *queryData, char *port)
+//sendData: data to be forwarded from client to either ServerC, ServerEE or ServerCS
+void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
 {
+    int numbytes;
+    int rv;
+    struct addrinfo hints, *servinfo, *p;
+	socklen_t addr_len;
+	memset(&hints, 0, sizeof hints);
+    char recv_data[MAXBUFLEN];
 
+    //Destination IP and Destination Port (note: ServerC has same IP addr as ServerM)
+    if ((rv = getaddrinfo(HOST_IP_ADDRESS, port, &hints, &servinfo)) != 0) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+		return;
+	}
+
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+		if ((socket(p->ai_family, p->ai_socktype,
+				p->ai_protocol)) == -1) {
+			perror("talker: socket");
+			continue;
+		}
+        break;
+    }
+
+    if (p == NULL) {
+		fprintf(stderr, "talker: failed to create socket\n");
+		return;
+	}
+
+    //UDP send portion
+    if ((numbytes = sendto(sockfd, sendData, strlen(sendData), 0,
+			 p->ai_addr, p->ai_addrlen)) == -1) {
+		perror("talker: sendto");
+		exit(1);
+	}
+
+    if (strcmp(port, SERVERC_PORT_NUM)==0) {
+		printf("The ServerM has sent encrypted login to ServerC using UDP over port %s\n", port);
+    }
+
+    //UDP receive portion
+    int recv_bytes;
+
+    recv_bytes = recvfrom(sockfd, recv_data, sizeof(recv_data), 0, NULL, NULL);
+    if(recv_bytes == -1) {
+        perror("recvfrom");
+        exit(1);
+    }
+    recv_data[recv_bytes] = '\0';
+
+    strncpy(udp_recv, recv_data, strlen(recv_data));
 }
 
 int main(void){
@@ -242,6 +290,7 @@ int main(void){
     socklen_t sin_size;
     char s[INET6_ADDRSTRLEN];
     char buf[MAXBUFLEN];
+    char udp_recv[MAXBUFLEN];
     char portstr[NI_MAXSERV];
 
     //setup tcp socket
@@ -301,10 +350,13 @@ int main(void){
                 //Received from Client
                 std::string encryptedUserLogin = encryptData(std::string(buf));
                 std::cout << "encryptedUserLogin=" << encryptedUserLogin << std::endl;
+                sendUDPServer(udp_sockfd, encryptedUserLogin.c_str(), SERVERC_PORT_NUM, udp_recv);
             }
-/*
+
             //4. Use udpQuery(.) to send to UDP Servers (ServerC, ServerEE, ServerCS)
-*/
+            //TODO (16/10): Send encrypted login data to ServerC!
+            
+
             close(tcp_child_fd);
             exit(0);
         }

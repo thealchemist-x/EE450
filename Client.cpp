@@ -30,9 +30,9 @@ void *get_in_addr(struct sockaddr *sa)
 std::string getUserCredentials(){
     std::string username="", password="", combined="";
     std::cout << "Please enter the username: ";
-    std::cin >> username;
+    std::getline(std::cin,username);
     std::cout << "Please enter the password: ";
-    std::cin >> password;
+    std::getline(std::cin,password);
 
     //username and password separated by a space!
     combined=username+" "+password;
@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 
     // 0. Get username and password from user
     std::string userLoginDetails = getUserCredentials();
-
+    std::cout << "userLoginDetails=" << userLoginDetails << std::endl;
     // 1. Sending username and password to ServerM (use send(.) )
     if((numbytes = send(tcp_sockfd, userLoginDetails.c_str(), userLoginDetails.length(),0)== -1)){
         perror("send");
