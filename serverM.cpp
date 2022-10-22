@@ -142,7 +142,7 @@ int setupUDP(){
     return sockfd;
 }
 
-int findCommaIndex(std::string data){
+int findSpaceIndex(std::string data){
     
     for(int i=0; i<data.length(); i++){
         if(data.at(i)==' '){
@@ -210,21 +210,31 @@ void implementEncryption(char *data){
 }
 
 std::string encryptData(std::string data){
-    
-    int commaIdx = findCommaIndex(data);
 
-    char username[commaIdx+1];
-    char password[data.length()-commaIdx];
+    int spaceIdx = findSpaceIndex(data);
+
+    char username[spaceIdx+1];
+    char password[data.length()-spaceIdx];
     memset(username, 0, sizeof(username));
     memset(password, 0, sizeof(password));
     
-    strncpy(username, data.c_str(), commaIdx);
-    std::copy(data.c_str()+commaIdx+1, data.c_str()+commaIdx+1+sizeof(password), password);
+    strncpy(username, data.c_str(), spaceIdx);
+    std::copy(data.c_str()+spaceIdx+1, data.c_str()+spaceIdx+1+sizeof(password), password);
 
     implementEncryption(username);
     implementEncryption(password);
-
+    
     return std::string(username) + " " + std::string(password);
+}
+
+std::string getUsername(std::string data){
+    int spaceIdx = findSpaceIndex(data);
+    char username[spaceIdx+1];
+    memset(username, 0, sizeof(username));
+
+    strncpy(username, data.c_str(), spaceIdx);
+
+    return std::string(username);
 }
 
 //Within tcp child socket
@@ -266,7 +276,7 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
 	}
 
     if (strcmp(port, SERVERC_PORT_NUM)==0) {
-		printf("The ServerM has sent encrypted login to ServerC using UDP over port %s\n", port);
+		printf("The main server sent an authentication request to serverC\n");
     }
 
     //UDP receive portion
@@ -282,6 +292,13 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
     strncpy(udp_recv, recv_data, strlen(recv_data));
 }
 
+void initialize(char *s, char *buf, char *udp_recv, char *portstr){
+    memset(s, 0, INET6_ADDRSTRLEN);
+    memset(buf, 0, MAXBUFLEN);
+    memset(udp_recv, 0, MAXBUFLEN);
+    memset(portstr, 0, NI_MAXSERV);
+}
+
 int main(void){
     int tcp_sockfd, tcp_child_fd, numbytes;
     int udp_sockfd;
@@ -292,6 +309,9 @@ int main(void){
     char buf[MAXBUFLEN];
     char udp_recv[MAXBUFLEN];
     char portstr[NI_MAXSERV];
+
+    //Initialize buffers
+    initialize(s, buf, udp_recv, portstr);
 
     //setup tcp socket
     tcp_sockfd = setupTCP();
@@ -315,7 +335,6 @@ int main(void){
             perror("getnameinfo failed!");
             exit(1);
         }
-        printf("server: got connection from %s\n", s);
 
         //Kenny: Remember each connection will have a different fork() code portion.
         //! (i.e. client child-socket's process will be different from ServerC child-socket's process)
@@ -339,8 +358,9 @@ int main(void){
 
             buf[numbytes]='\0';
             //unsigned int pNum = ntohs(((struct sockaddr_in*)their_addr)->sin_port);
-            unsigned int pNum = std::stoi(portstr);
-            printf("ServerM received the following: %s, numbytes=%d, from port=%d\n", buf, numbytes, pNum);
+            //unsigned int pNum = std::stoi(portstr);
+            std::string username = getUsername(std::string(buf));
+            printf("The main server received the authentication for %s using TCP over port %s\n", username.c_str(), portstr);
 
             //3. We may have to do some processing from received (TCP) data before relaying
             if(strcmp(portstr, SERVERC_PORT_NUM) == 0){
@@ -349,8 +369,10 @@ int main(void){
             else{
                 //Received from Client
                 std::string encryptedUserLogin = encryptData(std::string(buf));
-                std::cout << "encryptedUserLogin=" << encryptedUserLogin << std::endl;
+                //std::cout << "encryptedUserLogin=" << encryptedUserLogin << std::endl;
                 sendUDPServer(udp_sockfd, encryptedUserLogin.c_str(), SERVERC_PORT_NUM, udp_recv);
+                printf("The main server received the result of the authentication request from ServerC using UDP over port %s\n", SERVERC_PORT_NUM);
+                printf("ServerC authentication status = %s\n", udp_recv);
             }
 
             //4. Use udpQuery(.) to send to UDP Servers (ServerC, ServerEE, ServerCS)

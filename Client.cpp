@@ -39,6 +39,22 @@ std::string getUserCredentials(){
     return combined;
 }
 
+std::string getUsername(std::string data){
+    
+    int i;
+    for(i=0; i<data.length(); i++){
+        if(data.at(i)==' '){
+            break;
+        }
+    }
+
+    char username[i+1];
+    memset(username, 0, sizeof(username));
+    strncpy(username, data.c_str(), i);
+
+    return std::string(username);
+}
+
 int setupTCP(){
     int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -77,7 +93,6 @@ int setupTCP(){
 
 	inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
 			s, sizeof s);
-	printf("client: connecting to %s\n", s);
 
 	freeaddrinfo(servinfo); // all done with this structure
 
@@ -97,17 +112,18 @@ int main(int argc, char *argv[])
 */
 
     tcp_sockfd = setupTCP();
+    printf("The client is up and running\n");
 
     // 0. Get username and password from user
     std::string userLoginDetails = getUserCredentials();
-    std::cout << "userLoginDetails=" << userLoginDetails << std::endl;
+//    std::cout << "userLoginDetails=" << userLoginDetails << std::endl;
     // 1. Sending username and password to ServerM (use send(.) )
     if((numbytes = send(tcp_sockfd, userLoginDetails.c_str(), userLoginDetails.length(),0)== -1)){
         perror("send");
         exit(1);
     }
 
-//    printf("numbytes=%d, userLoginDetails=%s, length=%d\n", numbytes, buf, strlen(buf));
+    printf("%s sent an authentication request to the main server.\n", getUsername(userLoginDetails).c_str());
 
 /*
     // 2. Receiving from ServerM
