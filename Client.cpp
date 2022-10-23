@@ -103,6 +103,7 @@ int main(int argc, char *argv[])
 {
 	int tcp_sockfd, numbytes;  
 	char buf[MAXDATASIZE];
+    memset(buf, 0, sizeof(buf));
 
 /*
 	if (argc != 2) {
@@ -125,17 +126,19 @@ int main(int argc, char *argv[])
 
     printf("%s sent an authentication request to the main server.\n", getUsername(userLoginDetails).c_str());
 
-/*
+
     // 2. Receiving from ServerM
-	if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+	if ((numbytes = recv(tcp_sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
 	    perror("recv");
 	    exit(1);
 	}
 
 	buf[numbytes] = '\0';
 
-	printf("client: received '%s'\n",buf);
-*/
+	printf("%s received the result of authentication using TCP over port %s. Authentication status = %s\n",getUsername(userLoginDetails).c_str()
+                                                                                                          ,SERVERM_TCP_PORT_NUM
+                                                                                                          ,buf);
+
 	close(tcp_sockfd);
 
 	return 0;
