@@ -15,7 +15,8 @@
 #define SERVERM_IP_ADDRESS      "127.0.0.1"
 #define SERVERM_TCP_PORT_NUM    "25082" // the port client will be connecting to 
 
-#define MAXDATASIZE 1000 // max number of bytes we can get at once 
+#define MAXDATASIZE             1000 // max number of bytes we can get at once 
+#define AUTH_COUNT              3 // authentication count
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -53,6 +54,36 @@ std::string getUsername(std::string data){
     strncpy(username, data.c_str(), i);
 
     return std::string(username);
+}
+
+bool processAuthStatus(std::string username, char *status, int auth_count){
+    int auth_status = std::stoi(status);
+    if(auth_status != 2){
+
+        if(auth_status == 0){
+            printf("%s received the result of authentication using TCP over port %s. Authentication failed: Username Does not exist\n\n",
+                    username.c_str(), SERVERM_TCP_PORT_NUM);
+        }
+        else{
+             printf("%s received the result of authentication using TCP over port %s. Authentication failed: Password does not match\n\n",
+                    username.c_str(), SERVERM_TCP_PORT_NUM);           
+        }
+
+        int num_tries_left = AUTH_COUNT-auth_count;
+        printf("Attempts remaining: %d\n", num_tries_left);
+
+        if(num_tries_left == 0){
+            printf("Authentication Failed for 3 attempts. Client will shut down.\n");
+        }
+        fflush(stdout);
+        return false;
+    }
+    else{
+            printf("%s received the result of authentication using TCP over port %s. Authentication is successful\n",
+                    username.c_str(), SERVERM_TCP_PORT_NUM);         
+    }
+
+    return true;
 }
 
 int setupTCP(){
@@ -103,41 +134,48 @@ int main(int argc, char *argv[])
 {
 	int tcp_sockfd, numbytes;  
 	char buf[MAXDATASIZE];
-    memset(buf, 0, sizeof(buf));
-
-/*
-	if (argc != 2) {
-	    fprintf(stderr,"usage: client hostname\n");
-	    exit(1);
-	}
-*/
+    int auth_count=AUTH_COUNT;
+    bool isAuthOk = false;
 
     tcp_sockfd = setupTCP();
     printf("The client is up and running\n");
 
     // 0. Get username and password from user
-    std::string userLoginDetails = getUserCredentials();
-//    std::cout << "userLoginDetails=" << userLoginDetails << std::endl;
-    // 1. Sending username and password to ServerM (use send(.) )
-    if((numbytes = send(tcp_sockfd, userLoginDetails.c_str(), userLoginDetails.length(),0)== -1)){
-        perror("send");
-        exit(1);
+    for(int i = 0; i < AUTH_COUNT; ++i){
+        std::string userLoginDetails = getUserCredentials();
+
+        // 1. Sending username and password to ServerM (use send(.) )
+        if((numbytes = send(tcp_sockfd, userLoginDetails.c_str(), userLoginDetails.length(),0)== -1)){
+            perror("send");
+            exit(1);
+        }
+
+        printf("%s sent an authentication request to the main server.\n", getUsername(userLoginDetails).c_str());
+
+        // 2. Receiving from ServerM
+        memset(buf, 0, sizeof(buf));
+        if ((numbytes = recv(tcp_sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+            perror("recv");
+            exit(1);
+        }
+
+        buf[numbytes] = '\0';
+
+        isAuthOk = processAuthStatus(getUsername(userLoginDetails), buf, i+1);
+
+        if(isAuthOk){
+            break;
+        }
     }
 
-    printf("%s sent an authentication request to the main server.\n", getUsername(userLoginDetails).c_str());
-
-
-    // 2. Receiving from ServerM
-	if ((numbytes = recv(tcp_sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
-	    perror("recv");
-	    exit(1);
-	}
-
-	buf[numbytes] = '\0';
-
-	printf("%s received the result of authentication using TCP over port %s. Authentication status = %s\n",getUsername(userLoginDetails).c_str()
-                                                                                                          ,SERVERM_TCP_PORT_NUM
-                                                                                                          ,buf);
+    if(!isAuthOk){
+        //Inform ServerM to close child-tcp
+        sprintf(buf,"exit");
+        if((numbytes = send(tcp_sockfd, buf, strlen(buf),0)== -1)){
+            perror("send");
+            exit(1);
+        }
+    }
 
 	close(tcp_sockfd);
 
