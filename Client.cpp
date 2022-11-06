@@ -28,7 +28,22 @@ void *get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-std::string getUserCredentials(){
+std::string getUserQuery(){
+    std::string userQueryCourse="", userQueryKey="", combined="";
+    std::cout << "Please enter the course code to query: ";
+    std::getline(std::cin,userQueryCourse);
+    std::cout << "Please enter the category (Credit / Professor / Days / CourseName): ";
+    std::getline(std::cin,userQueryKey);
+
+    //printf("query=%s,len=%d\n",userQueryCourse.c_str(), userQueryCourse.length());
+    //printf("query-key=%s,len=%d\n",userQueryKey.c_str(), userQueryKey.length());
+
+    //Query course separated by comma!
+    combined=userQueryCourse + "," + userQueryKey;
+    return combined;
+}
+
+std::string getUserCredentials(std::string &mUsername){
     std::string username="", password="", combined="";
     std::cout << "Please enter the username: ";
     std::getline(std::cin,username);
@@ -37,36 +52,21 @@ std::string getUserCredentials(){
 
     //username and password separated by a space!
     combined=username+" "+password;
+    mUsername=username;
     return combined;
 }
 
-std::string getUsername(std::string data){
-    
-    int i;
-    for(i=0; i<data.length(); i++){
-        if(data.at(i)==' '){
-            break;
-        }
-    }
-
-    char username[i+1];
-    memset(username, 0, sizeof(username));
-    strncpy(username, data.c_str(), i);
-
-    return std::string(username);
-}
-
-bool processAuthStatus(std::string username, char *status, int auth_count){
+bool processAuthStatus(std::string username, char *status, int auth_count, const int local_port){
     int auth_status = std::stoi(status);
     if(auth_status != 2){
 
         if(auth_status == 0){
-            printf("%s received the result of authentication using TCP over port %s. Authentication failed: Username Does not exist\n\n",
-                    username.c_str(), SERVERM_TCP_PORT_NUM);
+            printf("%s received the result of authentication using TCP over port %d. Authentication failed: Username Does not exist\n\n",
+                    username.c_str(), local_port);
         }
         else{
-             printf("%s received the result of authentication using TCP over port %s. Authentication failed: Password does not match\n\n",
-                    username.c_str(), SERVERM_TCP_PORT_NUM);           
+             printf("%s received the result of authentication using TCP over port %d. Authentication failed: Password does not match\n\n",
+                    username.c_str(), local_port);           
         }
 
         int num_tries_left = AUTH_COUNT-auth_count;
@@ -79,8 +79,8 @@ bool processAuthStatus(std::string username, char *status, int auth_count){
         return false;
     }
     else{
-            printf("%s received the result of authentication using TCP over port %s. Authentication is successful\n",
-                    username.c_str(), SERVERM_TCP_PORT_NUM);         
+            printf("%s received the result of authentication using TCP over port %d. Authentication is successful\n",
+                    username.c_str(), local_port);         
     }
 
     return true;
@@ -136,13 +136,21 @@ int main(int argc, char *argv[])
 	char buf[MAXDATASIZE];
     int auth_count=AUTH_COUNT;
     bool isAuthOk = false;
+    std::string username="";
+    struct sockaddr_in sin;
+    socklen_t len = sizeof(sin);
 
     tcp_sockfd = setupTCP();
     printf("The client is up and running\n");
+    
+    //Get client's assigned port number
+    getsockname(tcp_sockfd, (struct sockaddr *)&sin, &len);
+    unsigned short local_port = ntohs(sin.sin_port);
+    printf("local port = %d\n", local_port);
 
     // 0. Get username and password from user
     for(int i = 0; i < AUTH_COUNT; ++i){
-        std::string userLoginDetails = getUserCredentials();
+        std::string userLoginDetails = getUserCredentials(username);
 
         // 1. Sending username and password to ServerM (use send(.) )
         if((numbytes = send(tcp_sockfd, userLoginDetails.c_str(), userLoginDetails.length(),0)== -1)){
@@ -150,7 +158,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
 
-        printf("%s sent an authentication request to the main server.\n", getUsername(userLoginDetails).c_str());
+        printf("%s sent an authentication request to the main server.\n", username.c_str());
 
         // 2. Receiving from ServerM
         memset(buf, 0, sizeof(buf));
@@ -161,20 +169,37 @@ int main(int argc, char *argv[])
 
         buf[numbytes] = '\0';
 
-        isAuthOk = processAuthStatus(getUsername(userLoginDetails), buf, i+1);
+        isAuthOk = processAuthStatus(username, buf, i+1, local_port);
 
         if(isAuthOk){
             break;
         }
     }
 
-    if(!isAuthOk){
-        //Inform ServerM to close child-tcp
-        sprintf(buf,"exit");
-        if((numbytes = send(tcp_sockfd, buf, strlen(buf),0)== -1)){
+    //Authentication success
+    if(isAuthOk){
+        std::string userQuery = getUserQuery();
+        //printf("(Client) %s, len=%d\n", userQuery.c_str(), userQuery.length());
+        if((numbytes = send(tcp_sockfd, userQuery.c_str(), userQuery.length(),0)== -1)){
             perror("send");
             exit(1);
         }
+
+        printf("%s sent a request to the main server.\n", username.c_str());
+
+        //Receiving from ServerM
+        memset(buf, 0, sizeof(buf));
+        if ((numbytes = recv(tcp_sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+            perror("recv");
+            exit(1);
+        }
+    }
+
+    //Inform ServerM to close child-tcp
+    sprintf(buf,"exit");
+    if((numbytes = send(tcp_sockfd, buf, strlen(buf),0)== -1)){
+        perror("send");
+        exit(1);
     }
 
 	close(tcp_sockfd);

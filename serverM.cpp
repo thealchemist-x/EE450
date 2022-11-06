@@ -22,6 +22,8 @@
 #define SERVEREE_PORT_NUM   "23082"
 #define SERVERCS_PORT_NUM   "22082"
 #define MAXBUFLEN           1000
+#define AUTH_SUCCESS        2
+#define COURSE_LEN          5
 
 void sigchld_handler(int s){
     // waitpid() might overwrite errno, so we save and restore it:
@@ -290,6 +292,36 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
     recv_data[recv_bytes] = '\0';
 
     strncpy(udp_recv, recv_data, strlen(recv_data));
+
+    if(strcmp(port, SERVERC_PORT_NUM) == 0){
+        printf("The main server received the result of the authentication request from ServerC using UDP over %s\n", HOST_UDP_PORT_NUM);
+    }
+}
+
+void convertToLowerKey(char *data, const int sz){
+    int i=0;
+    while(i<sz){
+        if(!islower(data[i])){
+            data[i]=tolower(data[i]);
+        }
+        i++;
+        data++;
+    }
+}
+
+void processQueryRequest(int sockfd, std::string &username, const char *data, const int sz, const char *port, char *udp_recv){
+    char courseID[COURSE_LEN+1];
+    char courseQueryKey[sz-COURSE_LEN];
+    memset(courseID, 0, sizeof(courseID));
+    memset(courseQueryKey, 0, sizeof(courseQueryKey));
+
+    strncpy(courseID, data, COURSE_LEN);
+    std::copy(data+COURSE_LEN+1, data+COURSE_LEN+1+sizeof(courseQueryKey), courseQueryKey);
+    convertToLowerKey(courseQueryKey, sizeof(courseQueryKey));
+
+    printf("The main server received from %s to query course %s about %s using TCP over port %s.\n", username.c_str(), courseID, courseQueryKey, HOST_TCP_PORT_NUM);
+
+    /* Phase 3B from here on*/
 }
 
 void initialize(char *s, char *buf, char *udp_recv, char *portstr){
@@ -309,6 +341,7 @@ int main(void){
     char buf[MAXBUFLEN];
     char udp_recv[MAXBUFLEN];
     char portstr[NI_MAXSERV];
+    std::string username="";
 
     //Initialize buffers
     initialize(s, buf, udp_recv, portstr);
@@ -320,9 +353,7 @@ int main(void){
     udp_sockfd = setupUDP();
 
     printf("The main server is up and running.\n");
-
     while(1){
-        printf("ServerM: Waiting for connection\n");
         sin_size = sizeof(their_addr);
         tcp_child_fd = accept(tcp_sockfd, (struct sockaddr *)&their_addr, &sin_size);
         if(tcp_child_fd == -1){
@@ -338,10 +369,11 @@ int main(void){
         }
 
         if(!fork()){ //child process here
-
+            bool isAuthOk=false;
             close(tcp_sockfd); //child socket doesn't need the parent-socket listener
 
             while(1){
+                memset(buf, 0, sizeof(buf));
                 if((numbytes = recv(tcp_child_fd, buf, MAXBUFLEN-1, 0)) == -1){
                     perror("recv");
                     exit(1);
@@ -352,24 +384,19 @@ int main(void){
                 //If Client is exiting and the child-tcp-socket is no longer needed
                 if(strcmp(buf, "exit")==0) {printf("Breaking out of ServerM-Child-While(1)\n"); break;}
 
-                std::string username = getUsername(std::string(buf));
-                printf("The main server received the authentication for %s using TCP over port %s\n", username.c_str(), portstr);
+                if(!isAuthOk){
+                    username = getUsername(std::string(buf));
+                    printf("The main server received the authentication for %s using TCP over port %s\n", username.c_str(), HOST_TCP_PORT_NUM);
 
-                //3. We may have to do some processing from received (TCP) data before relaying
-                //if(strcmp(portstr, SERVERC_PORT_NUM) == 0){
-                    //Received from ServerC
-                //}
-                //else{
-                    //Received from Client
+                    //Encrypt and authenticate with ServerC
                     std::string encryptedUserLogin = encryptData(std::string(buf));
-                    //std::cout << "encryptedUserLogin=" << encryptedUserLogin << std::endl;
                     sendUDPServer(udp_sockfd, encryptedUserLogin.c_str(), SERVERC_PORT_NUM, udp_recv);
-                    // printf("The main server received the result of the authentication request from ServerC using UDP over port %s\n", SERVERC_PORT_NUM);
-                    // printf("ServerC authentication status = %s\n", udp_recv);
-                //}
+                
 
-                //4. Use udpQuery(.) to send to UDP Servers (ServerC, ServerEE, ServerCS)
-                //TODO (16/10): Send encrypted login data to ServerC!
+                    //Update Authentication Status
+                    if(std::stoi(udp_recv) == AUTH_SUCCESS){ isAuthOk=true; }
+
+                    //Return status to client
                     memset(buf, 0, sizeof(buf));
                     sprintf(buf, "%s\n", udp_recv);
                     if((numbytes = send(tcp_child_fd, buf, strlen(buf),0)== -1)){
@@ -378,6 +405,11 @@ int main(void){
                     }
 
                     printf("The main server sent the authentication result to the client\n");
+                }
+                else{
+                    //printf("(auth-success) %s,len=%d\n", buf, strlen(buf));
+                    processQueryRequest(udp_sockfd, username, buf, strlen(buf), SERVERC_PORT_NUM, udp_recv);
+                }
             }
             close(tcp_child_fd);
             exit(0);
