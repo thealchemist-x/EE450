@@ -146,7 +146,6 @@ int main(int argc, char *argv[])
     //Get client's assigned port number
     getsockname(tcp_sockfd, (struct sockaddr *)&sin, &len);
     unsigned short local_port = ntohs(sin.sin_port);
-    printf("local port = %d\n", local_port);
 
     // 0. Get username and password from user
     for(int i = 0; i < AUTH_COUNT; ++i){

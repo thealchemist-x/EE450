@@ -278,7 +278,13 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
 	}
 
     if (strcmp(port, SERVERC_PORT_NUM)==0) {
-		printf("The main server sent an authentication request to serverC\n");
+		printf("The main server sent an authentication request to serverC.\n");
+    }
+    else if(strcmp(port, SERVEREE_PORT_NUM)==0){
+        printf("The main server sent a request to serverEE.\n");
+    }
+    else if(strcmp(port, SERVERCS_PORT_NUM)==0){
+        printf("The main server sent a request to serverCS.\n");
     }
 
     //UDP receive portion
@@ -294,7 +300,7 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
     strncpy(udp_recv, recv_data, strlen(recv_data));
 
     if(strcmp(port, SERVERC_PORT_NUM) == 0){
-        printf("The main server received the result of the authentication request from ServerC using UDP over %s\n", HOST_UDP_PORT_NUM);
+        printf("The main server received the result of the authentication request from ServerC using UDP over %s.\n", HOST_UDP_PORT_NUM);
     }
 }
 
@@ -309,12 +315,13 @@ void convertToLowerKey(char *data, const int sz){
     }
 }
 
-void processQueryRequest(int sockfd, std::string &username, const char *data, const int sz, const char *port, char *udp_recv){
+std::string processQueryRequest(int sockfd, std::string &username, const char *data, const int sz, char *udp_recv){
     char courseID[COURSE_LEN+1];
     char courseQueryKey[sz-COURSE_LEN];
     memset(courseID, 0, sizeof(courseID));
     memset(courseQueryKey, 0, sizeof(courseQueryKey));
 
+    //Copy CourseID and Query to respective fields
     strncpy(courseID, data, COURSE_LEN);
     std::copy(data+COURSE_LEN+1, data+COURSE_LEN+1+sizeof(courseQueryKey), courseQueryKey);
     convertToLowerKey(courseQueryKey, sizeof(courseQueryKey));
@@ -322,6 +329,9 @@ void processQueryRequest(int sockfd, std::string &username, const char *data, co
     printf("The main server received from %s to query course %s about %s using TCP over port %s.\n", username.c_str(), courseID, courseQueryKey, HOST_TCP_PORT_NUM);
 
     /* Phase 3B from here on*/
+    std::string combined_courseid_query = std::string(courseID) + "," + std::string(courseQueryKey);
+
+    return combined_courseid_query;
 }
 
 void initialize(char *s, char *buf, char *udp_recv, char *portstr){
@@ -390,7 +400,7 @@ int main(void){
 
                     //Encrypt and authenticate with ServerC
                     std::string encryptedUserLogin = encryptData(std::string(buf));
-                    sendUDPServer(udp_sockfd, encryptedUserLogin.c_str(), SERVERC_PORT_NUM, udp_recv);
+                    sendUDPServer(udp_sockfd, encryptedUserLogin.c_str(), (char *) SERVERC_PORT_NUM, udp_recv);
                 
 
                     //Update Authentication Status
@@ -408,7 +418,16 @@ int main(void){
                 }
                 else{
                     //printf("(auth-success) %s,len=%d\n", buf, strlen(buf));
-                    processQueryRequest(udp_sockfd, username, buf, strlen(buf), SERVERC_PORT_NUM, udp_recv);
+                    std::string combined_courseid_query = processQueryRequest(udp_sockfd, username, buf, strlen(buf), udp_recv);
+
+                    if(combined_courseid_query.c_str()[0] == 'E' && combined_courseid_query.c_str()[1] == 'E'){
+                        sendUDPServer(udp_sockfd, combined_courseid_query.c_str(), (char *) SERVEREE_PORT_NUM, udp_recv);
+                    }
+                    else{
+                        sendUDPServer(udp_sockfd, combined_courseid_query.c_str(), (char *) SERVERCS_PORT_NUM, udp_recv);
+                    }
+
+
                 }
             }
             close(tcp_child_fd);

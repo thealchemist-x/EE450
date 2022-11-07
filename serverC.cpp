@@ -219,23 +219,23 @@ int main(void)
             exit(1);
         }
         printf("The ServerC received an authentication request from the Main Server\n");
-        inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof(s));
+        /*inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof(s));
         int rc= getnameinfo((struct sockaddr *) &their_addr, addr_len, s, sizeof(s), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
-        if(rc!=0){ 
+        if(rc!=0){
             perror("getnameinfo failed!");
             exit(1);
-        }
+        }*/
 
         buf[numbytes] = '\0';
 
         // 2. Process the data
         int auth_status = authenticateUser(credDB, std::string(buf));
-        printf("Data: %s, auth_status = %d\n", buf, auth_status);
+        /* printf("Data: %s, auth_status = %d\n", buf, auth_status); */
 
         // 3. Send the data back to ServerM ( use sendto(.) )
         memset(buf, 0, sizeof(buf));
         sprintf(buf,"%d",auth_status);
-        sendUDPServer(sockfd, buf, SERVERM_UDP_PORT_NUM);
+        sendUDPServer(sockfd, buf, (char *)SERVERM_UDP_PORT_NUM);
     }
 
 	close(sockfd);
