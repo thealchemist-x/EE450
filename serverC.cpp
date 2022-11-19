@@ -112,6 +112,7 @@ int authenticateUser(std::map<std::string, std::string> &credDB, std::string dat
     return status;
 }
 
+//adapted mostly from beej's guide
 void sendUDPServer(int sockfd, const char *sendData, char *port)
 {
     int numbytes;
@@ -205,11 +206,6 @@ int main(void)
     //0. Load credentials
     loadCredentials(credDB);
 
-/*
-    for(std::map<std::string, std::string>:: iterator it=credDB.begin(); it!=credDB.end(); ++it){
-        std::cout << it->first << " : " << it->second << std::endl;
-    }
-*/
     while(1){
         
         // 1. Receive data from ServerM
@@ -219,18 +215,11 @@ int main(void)
             exit(1);
         }
         printf("The ServerC received an authentication request from the Main Server\n");
-        /*inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof(s));
-        int rc= getnameinfo((struct sockaddr *) &their_addr, addr_len, s, sizeof(s), portstr, sizeof(portstr), NI_NUMERICHOST | NI_NUMERICSERV);
-        if(rc!=0){
-            perror("getnameinfo failed!");
-            exit(1);
-        }*/
 
         buf[numbytes] = '\0';
 
         // 2. Process the data
         int auth_status = authenticateUser(credDB, std::string(buf));
-        /* printf("Data: %s, auth_status = %d\n", buf, auth_status); */
 
         // 3. Send the data back to ServerM ( use sendto(.) )
         memset(buf, 0, sizeof(buf));

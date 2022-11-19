@@ -35,50 +35,26 @@ void *get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-void removeNewLine(char *data, int sz){
-    //printf("(before) data=%s\n", data);
-    //printf("strlen(attribute) = %d\n", sz);
-    int i=0;
-    while(i<sz){
-        if(data[i]=='\n' || data[i]=='\r'){
-            //Replace with an end
-            data[i]='\0';
-            break;
-        }
-
-        //update
-        i++;
-        data++;
-    }
-    //Return pointer to rightful pos
-    data-=i;
-    //printf("updated-data=%s\n", data);
-    return;
-}
-
 std::vector<std::string> loadCourseData(const char *data, const int sz){
     std::vector<std::string> courseData;
     char str[sz];
     strncpy(str, data, sz);
 
     char *attribute = strtok(str, ",");
-    //printf("attribute=%s", attribute);
+
     courseData.push_back(attribute);
     int count = 0;
     while( count < COURSE_DATA_COLUMNS-1){
-        //printf("count=%d\n", count);
-        //printf("strtok b\n");
+
         attribute = strtok(NULL, ",");
-        //printf("strtok e\n");
+
         //Remove newline
-        removeNewLine(attribute, strlen(attribute));
+        attribute[strcspn(attribute, "\r\n")] = 0;
 
         courseData.push_back(attribute);
-        //printf("attribute=%s\n", attribute);
-
         count++;
     }
-    //printf("end-loadCourseData\n");
+
     return courseData;
 }
 
@@ -142,20 +118,62 @@ std::string processCourseCatalogue(std::map<std::string, std::vector<std::string
     strncpy(courseQuery, data+COURSE_CODE_LENGTH+1, len-(COURSE_CODE_LENGTH+1));
 
     printf("The ServerEE received a request from the Main Server about the %s of %s.\n", courseQuery, courseCode);
+    
+    std::string info = "";
 
     //Check if courseID exists within map
     std::map<std::string, std::vector<std::string> >::iterator it = map_ee.find(std::string(courseCode));
     if(it == map_ee.end()){
-        printf("Didn't find the course: %s\n", courseCode);
-        return "";
+        printf("Didn't find the course: %s.\n", courseCode);
+        info = "Didn't find the course: " + std::string(courseCode);
+        return info;
     }
 
     //Else, we found it! Get the vector of course information 
     std::vector<std::string> courseInfo = map_ee[std::string(courseCode)];
-    std::string info = retrieveInfoFromCourse(courseInfo,std::string(courseQuery));
+    info = retrieveInfoFromCourse(courseInfo,std::string(courseQuery));
 
     printf("The course information has been found: The %s of %s is %s.\n", courseQuery, courseCode, info.c_str());
     return info;
+}
+
+//adapted mostly from beej's guide
+void sendUDPServer(int sockfd, const char *sendData, char *port)
+{
+    int numbytes;
+    int rv;
+    struct addrinfo hints, *servinfo, *p;
+	socklen_t addr_len;
+	memset(&hints, 0, sizeof hints);
+
+    //Destination IP and Destination Port (note: ServerM has same IP addr as ServerC)
+    if ((rv = getaddrinfo(HOST_IP_ADDRESS, port, &hints, &servinfo)) != 0) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+		return;
+	}
+
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+		if ((socket(p->ai_family, p->ai_socktype,
+				p->ai_protocol)) == -1) {
+			perror("talker: socket");
+			continue;
+		}
+        break;
+    }
+
+    if (p == NULL) {
+		fprintf(stderr, "talker: failed to create socket\n");
+		return;
+	}
+
+    //UDP send portion
+    if ((numbytes = sendto(sockfd, sendData, strlen(sendData), 0,
+			 p->ai_addr, p->ai_addrlen)) == -1) {
+		perror("talker: sendto");
+		exit(1);
+	}
+
+    printf("The ServerEE finished sending the response to the Main Server.\n");
 }
 
 int main(void)
@@ -211,17 +229,8 @@ int main(void)
 
     // 0. Load EE course catalogue
     loadCourseCatalogue(ee_catalogue);
-/*
-    for(std::map<std::string, std::vector<std::string> >::iterator it=ee_catalogue.begin(); it!=ee_catalogue.end(); ++it){
-        std::cout << it->first << ": " << std::endl;
-        for(std::vector<std::string>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2){
-            std::cout  << " " << *it2;
-        }
-        std::cout << "\n";
-    }
-*/
+
     while(1){
-        
         // 1. Receive data from ServerM
         if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
             (struct sockaddr *)&their_addr, &addr_len)) == -1) {
@@ -235,19 +244,11 @@ int main(void)
         std::string info = processCourseCatalogue(ee_catalogue, buf, strlen(buf));
 
         // 3. Send the data back to ServerM ( use sendto(.) )
-
-/*
-        printf("listener: got packet from %s\n",
-            inet_ntop(their_addr.ss_family,
-                get_in_addr((struct sockaddr *)&their_addr),
-                s, sizeof(s));
-        printf("listener: packet is %d bytes long\n", numbytes);
-        buf[numbytes] = '\0';
-        printf("listener: packet contains \"%s\"\n", buf);
-*/
+        memset(buf, 0, sizeof(buf));
+        memcpy(buf, info.c_str(), info.length());
+        sendUDPServer(sockfd, buf, (char *)SERVERM_UDP_PORT_NUM);
     }
 
 	close(sockfd);
-
 	return 0;
 }

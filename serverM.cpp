@@ -45,6 +45,7 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+//adapted mostly from beej's guide
 int setupTCP(){
     
     int sockfd;
@@ -102,6 +103,7 @@ int setupTCP(){
     return sockfd;
 }
 
+//adapted mostly from beej's guide
 int setupUDP(){
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -151,10 +153,6 @@ int findSpaceIndex(std::string data){
             return i;
         }
     }
-    
-    //Else something is bad..
-    perror("Invalid user credentials");
-    exit(1);
 }
 
 char encryptUpperCase(char data){
@@ -241,6 +239,7 @@ std::string getUsername(std::string data){
 
 //Within tcp child socket
 //sendData: data to be forwarded from client to either ServerC, ServerEE or ServerCS
+//adapted mostly from beej's guide
 void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
 {
     int numbytes;
@@ -289,7 +288,6 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
 
     //UDP receive portion
     int recv_bytes;
-
     recv_bytes = recvfrom(sockfd, recv_data, sizeof(recv_data), 0, NULL, NULL);
     if(recv_bytes == -1) {
         perror("recvfrom");
@@ -297,10 +295,18 @@ void sendUDPServer(int sockfd, const char *sendData, char *port, char *udp_recv)
     }
     recv_data[recv_bytes] = '\0';
 
+    //Reset udp_recv buffer first
+    memset(udp_recv, 0, MAXBUFLEN);
     strncpy(udp_recv, recv_data, strlen(recv_data));
 
     if(strcmp(port, SERVERC_PORT_NUM) == 0){
         printf("The main server received the result of the authentication request from ServerC using UDP over %s.\n", HOST_UDP_PORT_NUM);
+    }
+    else if(strcmp(port, SERVERCS_PORT_NUM) == 0){
+        printf("The main server received the response from serverCS using UDP over port %s.\n", HOST_UDP_PORT_NUM);
+    }
+    else if(strcmp(port, SERVEREE_PORT_NUM) == 0){
+        printf("The main server received the response from serverEE using UDP over port %s.\n", HOST_UDP_PORT_NUM);
     }
 }
 
@@ -406,18 +412,9 @@ int main(void){
                     //Update Authentication Status
                     if(std::stoi(udp_recv) == AUTH_SUCCESS){ isAuthOk=true; }
 
-                    //Return status to client
-                    memset(buf, 0, sizeof(buf));
-                    sprintf(buf, "%s\n", udp_recv);
-                    if((numbytes = send(tcp_child_fd, buf, strlen(buf),0)== -1)){
-                        perror("send");
-                        exit(1);
-                    }
-
                     printf("The main server sent the authentication result to the client\n");
                 }
                 else{
-                    //printf("(auth-success) %s,len=%d\n", buf, strlen(buf));
                     std::string combined_courseid_query = processQueryRequest(udp_sockfd, username, buf, strlen(buf), udp_recv);
 
                     if(combined_courseid_query.c_str()[0] == 'E' && combined_courseid_query.c_str()[1] == 'E'){
@@ -426,8 +423,15 @@ int main(void){
                     else{
                         sendUDPServer(udp_sockfd, combined_courseid_query.c_str(), (char *) SERVERCS_PORT_NUM, udp_recv);
                     }
+                    printf("The main server sent the query information to the client\n");
+                }
 
-
+                //Return status to client
+                memset(buf, 0, sizeof(buf));
+                sprintf(buf, "%s\n", udp_recv);
+                if((numbytes = send(tcp_child_fd, buf, strlen(buf),0)== -1)){
+                    perror("send");
+                    exit(1);
                 }
             }
             close(tcp_child_fd);

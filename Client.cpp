@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <iostream>
 #include <string>
+#include <algorithm>
 
 #define SERVERM_IP_ADDRESS      "127.0.0.1"
 #define SERVERM_TCP_PORT_NUM    "25082" // the port client will be connecting to 
@@ -28,18 +29,32 @@ void *get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-std::string getUserQuery(){
+void convertToLowerKey(char *data, const int sz){
+    int i=0;
+    while(i<sz){
+        if(!islower(data[i])){
+            data[i]=tolower(data[i]);
+        }
+        i++;
+        data++;
+    }
+}
+
+std::string getUserQuery(std::string &mCourseCode, std::string &mCategory){
     std::string userQueryCourse="", userQueryKey="", combined="";
     std::cout << "Please enter the course code to query: ";
     std::getline(std::cin,userQueryCourse);
     std::cout << "Please enter the category (Credit / Professor / Days / CourseName): ";
     std::getline(std::cin,userQueryKey);
 
-    //printf("query=%s,len=%d\n",userQueryCourse.c_str(), userQueryCourse.length());
-    //printf("query-key=%s,len=%d\n",userQueryKey.c_str(), userQueryKey.length());
-
     //Query course separated by comma!
     combined=userQueryCourse + "," + userQueryKey;
+    mCourseCode=userQueryCourse;
+    mCategory=userQueryKey;
+
+    //Converts mCategory to lower casing
+    std::transform(mCategory.begin(), mCategory.end(), mCategory.begin(),[](unsigned char c) {return std::tolower(c);});
+
     return combined;
 }
 
@@ -86,6 +101,7 @@ bool processAuthStatus(std::string username, char *status, int auth_count, const
     return true;
 }
 
+//adapted mostly from beej's guide
 int setupTCP(){
     int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -136,7 +152,7 @@ int main(int argc, char *argv[])
 	char buf[MAXDATASIZE];
     int auth_count=AUTH_COUNT;
     bool isAuthOk = false;
-    std::string username="";
+    std::string username="", courseCode="", category="";
     struct sockaddr_in sin;
     socklen_t len = sizeof(sin);
 
@@ -177,28 +193,37 @@ int main(int argc, char *argv[])
 
     //Authentication success
     if(isAuthOk){
-        std::string userQuery = getUserQuery();
-        //printf("(Client) %s, len=%d\n", userQuery.c_str(), userQuery.length());
-        if((numbytes = send(tcp_sockfd, userQuery.c_str(), userQuery.length(),0)== -1)){
-            perror("send");
-            exit(1);
+        while(1){
+            std::string userQuery = getUserQuery(courseCode, category);
+
+            if((numbytes = send(tcp_sockfd, userQuery.c_str(), userQuery.length(),0)== -1)){
+                perror("send");
+                exit(1);
+            }
+
+            printf("%s sent a request to the main server.\n", username.c_str());
+
+            //Receiving from ServerM
+            memset(buf, 0, sizeof(buf));
+            if ((numbytes = recv(tcp_sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+                perror("recv");
+                exit(1);
+            }
+            
+            buf[numbytes] = '\0';
+            buf[strcspn(buf, "\r\n")] = 0;
+
+            printf("The client received the response from the Main server using TCP over port %d.\n", local_port);
+            
+            //Phase 4B - Looping
+            if(strstr(buf,"Didn't")==NULL){
+                printf("The %s of %s is %s.\n\n", category.c_str(), courseCode.c_str(), buf);
+            }
+            else{
+                printf("%s.\n\n", buf);
+            }
+            printf("-----Start a new request-----\n");
         }
-
-        printf("%s sent a request to the main server.\n", username.c_str());
-
-        //Receiving from ServerM
-        memset(buf, 0, sizeof(buf));
-        if ((numbytes = recv(tcp_sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
-            perror("recv");
-            exit(1);
-        }
-    }
-
-    //Inform ServerM to close child-tcp
-    sprintf(buf,"exit");
-    if((numbytes = send(tcp_sockfd, buf, strlen(buf),0)== -1)){
-        perror("send");
-        exit(1);
     }
 
 	close(tcp_sockfd);
